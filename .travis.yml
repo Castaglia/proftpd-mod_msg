@@ -28,8 +28,9 @@ script:
   - git clone --depth 10 https://github.com/proftpd/proftpd.git
   - cp mod_msg.c proftpd/contrib/
   - cd proftpd
-  - ./configure --enable-devel=coverage --enable-dso --enable-tests --with-shared=mod_msg
+  - ./configure LIBS='-lm -lrt -pthread' --enable-devel=coverage --enable-dso --enable-tests --with-shared=mod_msg
   - make
   - make clean
-  - ./configure --enable-devel=coverage --enable-tests --with-modules=mod_msg
+  - ./configure LIBS='-lm -lrt -pthread' --enable-devel=coverage --enable-tests --with-modules=mod_msg
   - make
+  # Run `tidy -e -q mod_msg.html` for doc validation
