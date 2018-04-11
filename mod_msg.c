@@ -1,7 +1,6 @@
 /*
  * ProFTPD: mod_msg -- a module for sending messages to connected clients
- *
- * Copyright (c) 2004 TJ Saunders
+ * Copyright (c) 2004-2018 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,7 +14,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307, USA.
+ * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
  *
  * As a special exemption, TJ Saunders and other respective copyright holders
  * give permission to link this program with OpenSSL, and distribute the
@@ -24,8 +23,6 @@
  *
  * This is mod_msg, contrib software for proftpd 1.2 and above.
  * For more information contact TJ Saunders <tj@castaglia.org>.
- *
- * $Id: mod_msg.c,v 1.5 2004/05/26 19:43:18 tj Exp tj $
  */
 
 #include "conf.h"
@@ -39,10 +36,11 @@
 # define MSGMAX 8192
 #endif /* MSGMAX */
 
-#define MOD_MSG_VERSION		"mod_msg/0.4.1"
+#define MOD_MSG_VERSION		"mod_msg/0.5"
 
-#if PROFTPD_VERSION_NUMBER < 0x0001021001
-# error "ProFTPD 1.2.10rc1 or later required"
+/* Make sure the version of proftpd is as necessary. */
+#if PROFTPD_VERSION_NUMBER < 0x0001030604
+# error "ProFTPD 1.3.6 or later required"
 #endif
 
 #define MSG_PROJ_ID		246
@@ -52,9 +50,9 @@ extern pid_t mpid;
 
 module msg_module;
 
-#ifndef USE_CTRLS
+#ifndef PR_USE_CTRLS
 # error "mod_msg requires Controls support (--enable-ctrls)"
-#endif /* USE_CTRLS */
+#endif /* PR_USE_CTRLS */
 
 static ctrls_acttab_t msg_acttab[];
 
@@ -240,26 +238,27 @@ MODRET set_msgctrlsacls(cmd_rec *cmd) {
     CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, ": unknown action: '",
       bad_action, "'", NULL));
 
-  return HANDLED(cmd);
+  return PR_HANDLED(cmd);
 }
 
 /* usage: MessageEngine on|off */
 MODRET set_msgengine(cmd_rec *cmd) {
-  int bool;
+  int engine = -1;
   config_rec *c;
 
   CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT|CONF_VIRTUAL|CONF_GLOBAL);
 
-  bool = get_boolean(cmd, 1);
-  if (bool == -1)
+  engine = get_boolean(cmd, 1);
+  if (engine == -1) {
     CONF_ERROR(cmd, "expected Boolean parameter");
+  }
 
   c = add_config_param(cmd->argv[0], 1, NULL);
-  c->argv[0] = pcalloc(c->pool, sizeof(unsigned char));
-  *((unsigned char *) c->argv[0]) = bool;
+  c->argv[0] = pcalloc(c->pool, sizeof(int));
+  *((int *) c->argv[0]) = engine;
 
-  return HANDLED(cmd);
+  return PR_HANDLED(cmd);
 }
 
 /* usage: MessageLog path */
@@ -267,11 +266,12 @@ MODRET set_msglog(cmd_rec *cmd) {
   CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT);
 
-  if (pr_fs_valid_path(cmd->argv[1]) < 0)
+  if (pr_fs_valid_path(cmd->argv[1]) < 0) {
     CONF_ERROR(cmd, "must be an absolute path");
+  }
 
   add_config_param_str(cmd->argv[0], 1, cmd->argv[1]);
-  return HANDLED(cmd);
+  return PR_HANDLED(cmd);
 }
 
 /* usage: MessageQueue path */
@@ -279,11 +279,12 @@ MODRET set_msgqueue(cmd_rec *cmd) {
   CHECK_ARGS(cmd, 1);
   CHECK_CONF(cmd, CONF_ROOT);
 
-  if (pr_fs_valid_path(cmd->argv[1]) < 0)
+  if (pr_fs_valid_path(cmd->argv[1]) < 0) {
     CONF_ERROR(cmd, "must be an absolute path");
+  }
 
   msg_queue_path = pstrdup(msg_pool, cmd->argv[1]);
-  return HANDLED(cmd);
+  return PR_HANDLED(cmd);
 }
 
 /* Command handlers
@@ -293,64 +294,74 @@ MODRET msg_post_any(cmd_rec *cmd) {
   register unsigned int i = 0;
   char **msgs;
 
-  if (!msg_engine)
-    return DECLINED(cmd);
+  if (msg_engine == FALSE) {
+    return PR_DECLINED(cmd);
+  }
 
   /* If there are no messages pending for this process, be done now. */
-  if (!msg_pending_list || msg_pending_list->nelts == 0)
-    return DECLINED(cmd);
+  if (!msg_pending_list ||
+      msg_pending_list->nelts == 0) {
+    return PR_DECLINED(cmd);
+  }
 
   /* Skip commands whose reply format is strictly proscribed. */
 
   /* XXX there are probably more commands to be skipped here */
   if (strcmp(cmd->argv[0], C_EPSV) == 0 ||
       strcmp(cmd->argv[0], C_PASV) == 0 ||
-      strcmp(cmd->argv[0], C_STOU) == 0)
-    return DECLINED(cmd);
+      strcmp(cmd->argv[0], C_STOU) == 0) {
+    return PR_DECLINED(cmd);
+  }
 
   /* Tack on any messages to this command. */
   msgs = (char **) msg_pending_list->elts;
-  for (i = 0; i < msg_pending_list->nelts; i++)
-    pr_response_add(R_DUP, msgs[i]);
+  for (i = 0; i < msg_pending_list->nelts; i++) {
+    pr_response_add(R_DUP, "%s", msgs[i]);
+  }
 
   /* Clear the pending pool. */
   destroy_pool(msg_pending_pool);
   msg_pending_pool = NULL;
   msg_pending_list = NULL;
 
-  return DECLINED(cmd);
+  return PR_DECLINED(cmd);
 }
 
 MODRET msg_post_err_any(cmd_rec *cmd) {
   register unsigned int i = 0;
   char **msgs;
 
-  if (!msg_engine)
-    return DECLINED(cmd);
+  if (msg_engine == FALSE) {
+    return PR_DECLINED(cmd);
+  }
 
   /* If there are no messages pending for this process, be done now. */
-  if (!msg_pending_list || msg_pending_list->nelts == 0)
-    return DECLINED(cmd);
+  if (!msg_pending_list ||
+      msg_pending_list->nelts == 0) {
+    return PR_DECLINED(cmd);
+  }
 
   /* Skip commands whose reply format is strictly proscribed. */
 
   /* XXX there are probably more commands to be skipped here */
   if (strcmp(cmd->argv[0], C_EPSV) == 0 ||
       strcmp(cmd->argv[0], C_PASV) == 0 ||
-      strcmp(cmd->argv[0], C_STOU) == 0)
-    return DECLINED(cmd);
+      strcmp(cmd->argv[0], C_STOU) == 0) {
+    return PR_DECLINED(cmd);
+  }
 
   /* Tack on any messages to this command. */
   msgs = (char **) msg_pending_list->elts;
-  for (i = 0; i < msg_pending_list->nelts; i++)
-    pr_response_add_err(R_DUP, msgs[i]);
+  for (i = 0; i < msg_pending_list->nelts; i++) {
+    pr_response_add_err(R_DUP, "%s", msgs[i]);
+  }
 
   /* Clear the pending pool. */
   destroy_pool(msg_pending_pool);
   msg_pending_pool = NULL;
   msg_pending_list = NULL;
 
-  return DECLINED(cmd);
+  return PR_DECLINED(cmd);
 }
 
 /* Event handlers
@@ -539,11 +550,14 @@ static int msg_handle_msg(pr_ctrls_t *ctrl, int reqargc, char **reqargv) {
     /* Iterate through the scoreboard, looking for any sessions for the
      * given user.
      */
-    if (pr_rewind_scoreboard() < 0)
+    if (pr_rewind_scoreboard() < 0) {
       (void) pr_log_writefile(msg_logfd, MOD_MSG_VERSION,
         "error rewinding scoreboard: %s", strerror(errno));
+    }
 
-    while ((score = pr_scoreboard_read_entry()) != NULL) {
+    while ((score = pr_scoreboard_entry_read()) != NULL) {
+      pr_signals_handle();
+
       if (strcmp(user, score->sce_user) == 0) {
         msg_know_dst = TRUE;
 
@@ -553,8 +567,9 @@ static int msg_handle_msg(pr_ctrls_t *ctrl, int reqargc, char **reqargv) {
             "error sending message to user '%s' (pid %u): %s", user,
             score->sce_pid, strerror(errno));
 
-        } else
+        } else {
           msg_sent = TRUE;
+        }
       }
     }
 
@@ -565,7 +580,7 @@ static int msg_handle_msg(pr_ctrls_t *ctrl, int reqargc, char **reqargv) {
     register unsigned int i = 0;
     pr_scoreboard_entry_t *score = NULL;
     const char *addr, *msgstr = "";
-    pr_netaddr_t *na;
+    const pr_netaddr_t *na;
 
     if (reqargc == 1) {
       pr_ctrls_add_response(ctrl, "msg host: missing required host name");
@@ -603,11 +618,14 @@ static int msg_handle_msg(pr_ctrls_t *ctrl, int reqargc, char **reqargv) {
     /* Iterate through the scoreboard, looking for any sessions for the
      * given address.
      */
-    if (pr_rewind_scoreboard() < 0)
+    if (pr_rewind_scoreboard() < 0) {
       (void) pr_log_writefile(msg_logfd, MOD_MSG_VERSION,
         "error rewinding scoreboard: %s", strerror(errno));
+    }
 
-    while ((score = pr_scoreboard_read_entry()) != NULL) {
+    while ((score = pr_scoreboard_entry_read()) != NULL) {
+      pr_signals_handle();
+
       if (strcmp(addr, score->sce_client_addr) == 0) {
         msg_know_dst = TRUE;
 
@@ -617,8 +635,9 @@ static int msg_handle_msg(pr_ctrls_t *ctrl, int reqargc, char **reqargv) {
             "error sending message to host '%s' (pid %u): %s", reqargv[1],
             score->sce_pid, strerror(errno));
 
-        } else
+        } else {
           msg_sent = TRUE;
+        }
       }
     }
 
@@ -654,11 +673,14 @@ static int msg_handle_msg(pr_ctrls_t *ctrl, int reqargc, char **reqargv) {
       return -1;
     }
 
-    if (pr_rewind_scoreboard() < 0)
+    if (pr_rewind_scoreboard() < 0) {
       (void) pr_log_writefile(msg_logfd, MOD_MSG_VERSION,
         "error rewinding scoreboard: %s", strerror(errno));
+    }
 
-    while ((score = pr_scoreboard_read_entry()) != NULL) {
+    while ((score = pr_scoreboard_entry_read()) != NULL) {
+      pr_signals_handle();
+
       if (strcmp(score->sce_class, class) == 0) {
         msg_know_dst = TRUE;
 
@@ -668,8 +690,9 @@ static int msg_handle_msg(pr_ctrls_t *ctrl, int reqargc, char **reqargv) {
             "error sending message to class '%s' (pid %u): %s", reqargv[1],
             score->sce_pid, strerror(errno));
 
-        } else
+        } else {
           msg_sent = TRUE;
+        }
       }
     }
 
@@ -700,20 +723,24 @@ static int msg_handle_msg(pr_ctrls_t *ctrl, int reqargc, char **reqargv) {
       return -1;
     }
 
-    if (pr_rewind_scoreboard() < 0)
+    if (pr_rewind_scoreboard() < 0) {
       (void) pr_log_writefile(msg_logfd, MOD_MSG_VERSION,
         "error rewinding scoreboard: %s", strerror(errno));
+    }
 
     msg_know_dst = TRUE;
-    while ((score = pr_scoreboard_read_entry()) != NULL) {
+    while ((score = pr_scoreboard_entry_read()) != NULL) {
+      pr_signals_handle();
+
       if (msg_send_msg(score->sce_pid, msgstr) < 0) {
         msg_errno = errno;
         (void) pr_log_writefile(msg_logfd, MOD_MSG_VERSION,
-          "error sending message to all (pid %u): %s", reqargv[1],
-          score->sce_pid, strerror(errno));
+          "error sending message to all (pid %lu): %s",
+          (unsigned long) score->sce_pid, strerror(errno));
 
-      } else
+      } else {
         msg_sent = TRUE;
+      }
     }
 
     pr_restore_scoreboard();
