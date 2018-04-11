@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>ProFTPD module mod_msg</title>
+</head>
+
+<body bgcolor=white>
+
+<hr><br>
+<center>
+<h2><b>ProFTPD module <code>mod_msg</code></b></h2>
+</center>
+<hr><br>
+
+The <code>mod_msg</code> module allows system users to send messages to
+connected clients via the <code>ftpdctl</code> program.  The module works by
+creating a SysV message queue, which is used to pass messages from the daemon
+process to session processes.
+
+<p>
+This module is contained in the <code>mod_msg.c</code> file for
+ProFTPD 1.2, and is not compiled by default.  Installation instructions
+are discussed <a href="#Installation">here</a>.  Documentation on
+<code>mod_msg</code> <a href="#Usage">usage</a> follows.
+
+<p>
+The most current version of <code>mod_msg</code> can be found at:
+<pre>
+  <a href="http://www.castaglia.org/proftpd/">http://www.castaglia.org/proftpd/</a>
+</pre>
+
+<h2>Author</h2>
+<p>
+Please contact TJ Saunders &lt;tj <i>at</i> castaglia.org&gt; with any
+questions, concerns, or suggestions regarding this module.
+
+<h2>Directives</h2>
+<ul>
+  <li><a href="#MessageControlsACLs">MesssageControlsACLs</a>
+  <li><a href="#MessageEngine">MessageEngine</a>
+  <li><a href="#MessageLog">MessageLog</a>
+  <li><a href="#MessageQueue">MessageQueue</a>
+</ul>
+
+<h2>Control Actions</h2>
+<ul>
+  <li><a href="#msg"><code>msg</code></a>
+</ul>
+
+<hr>
+<h3><a name="MessageControlsACLs">MessageControlsACLs</a></h3>
+<strong>Syntax:</strong> MessageControlsACLs <em>actions</em>|&quot;all&quot; &quot;allow&quot;|&quot;deny&quot; &quot;user&quot;|&quot;group&quot; <em>list</em><br>
+<strong>Default:</strong> None<br>
+<strong>Context:</strong> server config
+<strong>Module:</strong> mod_msg<br>
+<strong>Compatibility:</strong> 1.2.10rc1 and later
+
+<p>
+Example:
+<pre>
+  # Allow all users to send messages to connected clients
+  MessageControlsACLs msg allow user *
+</pre>
+
+<p>
+<hr>
+<h3><a name="MessageEngine">MessageEngine</a></h3>
+<strong>Syntax:</strong> MessageEngine <em>on|off</em><br>
+<strong>Default:</strong> off<br>
+<strong>Context:</strong> server config, <code>&lt;VirtualHost&gt;</code>, <code>&lt;Global&gt;</code><br>
+<strong>Module:</strong> mod_msg<br>
+<strong>Compatibility:</strong> 1.2.10rc1 and later
+
+<p>
+The <code>MessageEngine</code> directive enables or disables the module's
+runtime message queue.  If it is set to <em>off</em> this module does no
+passing of messages. Use this directive to disable the module instead of
+commenting out all <code>mod_msg</code> directives.
+
+<p>
+<hr>
+<h3><a name="MessageLog">MessageLog</a></h3>
+<strong>Syntax:</strong> MessageLog <em>path|&quot;none&quot;</em><br>
+<strong>Default:</strong> None<br>
+<strong>Context:</strong> server config
+<strong>Module:</strong> mod_msg<br>
+<strong>Compatibility:</strong> 1.2.10rc1 and later
+
+<p>
+The <code>MessageLog</code> directive is used to a specify a log file for
+<code>mod_msg</code> reporting and debugging. The <em>path</em> parameter must
+be the full path to the file to use for logging.  Note that this path must
+<b>not</b> be to a world-writeable directory and, unless
+<code>AllowLogSymlinks</code> is explicitly set to <em>on</em>
+(generally a bad idea), the path must <b>not</b> be a symbolic link.
+
+<p>
+If <em>path</em> is &quot;none&quot;, no logging will be done at all.
+
+<p>
+<hr>
+<h3><a name="MessageQueue">MessageQueue</a></h3>
+<strong>Syntax:</strong> MessageQueue <em>path</em><br>
+<strong>Default:</strong> None<br>
+<strong>Context:</strong> server config
+<strong>Module:</strong> mod_msg<br>
+<strong>Compatibility:</strong> 1.2.10rc1 and later
+
+<p>
+The <code>MessageQueue</code> directive configures a path to a file that
+<code>mod_msg<code> will use when sending messages.  This file itself is
+not used for storing messages; it is necessary for obtaining a unique key
+to use as the ID for the message queue.
+
+<p>
+<hr>
+<h2>Control Actions</h2>
+
+<p>
+<hr>
+<h3><a name="msg"><code>msg</code></a></h3>
+<strong>Syntax:</strong> ftpdctl msg [<em>class|host|user</em> <em>name</em>]|[all] <em>message</em><br>
+<strong>Purpose:</strong> Send a message to a class, host, user, or all
+
+<p>
+The <code>msg</code> control action can be used to send messages to connected
+clients.  Any words that follow the given user or host name in the
+<code>ftpdctl</code> command will be sent to the connected session, and added
+to the response to the session's next FTP command.  Note, however, that some
+command responses cannot be altered, such as <code>EPSV</code>,
+<code>PASV</code>, or <code>STOU</code>; <code>mod_msg</code> avoids these
+command responses.  <b>Note</b>: some FTP clients may <b>not</b> display the
+text messages of FTP responses to the user; there is nothing that
+<code>mod_msg</code> can do when such clients are used.
+
+<p>
+Examples:
+<pre>
+  ftpdctl msg user dave Dave, you need to delete some files
+  ftpdctl msg all This server will be going offline for maintenance soon
+</pre>
+
+<p>
+<hr>
+<h2><a name="Installation">Installation</a></h2>
+To install <code>mod_msg</code>, copy the <code>mod_msg.c</code> file into
+<pre>
+  <i>proftpd-dir</i>/contrib/
+</pre>
+after unpacking the latest proftpd-1.2 source code.  Then follow the usual
+steps for using third-party modules in proftpd, making sure to include
+the <code>--enable-ctrls</code> configure option, which <code>mod_msg</code>
+requires:
+<pre>
+  ./configure --enable-ctrls --with-modules=mod_msg
+  make
+  make install
+</pre>
+
+<p>
+<hr>
+<h2><a name="Usage">Usage</a></h2>
+
+<p>
+Example configuration:
+<pre>
+  &lt;IfModule mod_msg.c&gt;
+    MessageEngine on
+    MessageLog /var/log/ftpd/msg.log
+    MessageQueue /var/ftpd/msg.queue
+
+    # Allow all system users to send messages
+    MessageControlsACLs msg allow user *
+  &lt;/IfModule&gt;
+</pre>
+
+<p>
+<hr>
+<font size=2><b><i>
+&copy; Copyright 2017 TJ Saunders<br>
+ All Rights Reserved<br>
+</i></b></font>
+<hr>
+
+</body>
+</html>
