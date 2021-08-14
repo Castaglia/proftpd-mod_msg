@@ -3,7 +3,7 @@ proftpd-mod_msg
 
 Status
 ------
-[![Build Status](https://travis-ci.org/Castaglia/proftpd-mod_msg.svg?branch=master)](https://travis-ci.org/Castaglia/proftpd-mod_msg)
+[![GitHub Actions CI Status](https://github.com/Castaglia/proftpd-mod_msg/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Castaglia/proftpd-mod_msg/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-GPL-brightgreen.svg)](https://img.shields.io/badge/license-GPL-brightgreen.svg)
 
 
