@@ -1,6 +1,6 @@
 /*
  * ProFTPD: mod_msg -- a module for sending messages to connected clients
- * Copyright (c) 2004-2018 TJ Saunders
+ * Copyright (c) 2004-2025 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -50,7 +50,7 @@ extern pid_t mpid;
 
 module msg_module;
 
-#ifndef PR_USE_CTRLS
+#if !defined(PR_USE_CTRLS)
 # error "mod_msg requires Controls support (--enable-ctrls)"
 #endif /* PR_USE_CTRLS */
 
@@ -136,8 +136,9 @@ static int msg_recv_msg(void) {
   }
 
   msg = malloc(sizeof(struct mq_msg) + MSGMAX - sizeof(msg->mtext));
-  if (!msg)
-    end_login(1);
+  if (msg == NULL) {
+    pr_session_end(0);
+  }
 
   msglen = msgrcv(msg_qid, msg, sizeof(buf), getpid(),
     IPC_NOWAIT|MSG_NOERROR);
@@ -164,8 +165,9 @@ static int msg_recv_msg(void) {
 #ifdef ENOMSG
       errno != ENOMSG &&
 #endif /* ENOMSG */
-      errno != EAGAIN)
+      errno != EAGAIN) {
     return -1;
+  }
 
   return nmsgs;
 }
@@ -178,8 +180,9 @@ static int msg_send_msg(pid_t dst_pid, const char *msgstr) {
   size_t msglen = strlen(msgstr) + 1;
 
   msg = malloc(sizeof(struct mq_msg) + MSGMAX - sizeof(msg->mtext));
-  if (!msg)
-    end_login(1);
+  if (msg == NULL) {
+    pr_session_end(0);
+  }
 
   msg->mtype = dst_pid;
   sstrncpy(msg->mtext, msgstr, msglen);
@@ -201,9 +204,10 @@ static int msg_send_msg(pid_t dst_pid, const char *msgstr) {
   res = kill(dst_pid, SIGUSR2);
   PRIVS_RELINQUISH
 
-  if (res < 0)
+  if (res < 0) {
     (void) pr_log_writefile(msg_logfd, MOD_MSG_VERSION,
       "error sending notice: %s", strerror(errno));
+  }
 
   return 0;
 }
@@ -221,22 +225,26 @@ MODRET set_msgctrlsacls(cmd_rec *cmd) {
   /* We can cheat here, and use the ctrls_parse_acl() routine to
    * separate the given string...
    */
-  actions = ctrls_parse_acl(cmd->tmp_pool, cmd->argv[1]);
+  actions = pr_ctrls_parse_acl(cmd->tmp_pool, cmd->argv[1]);
 
   /* Check the second parameter to make sure it is "allow" or "deny" */
   if (strcmp(cmd->argv[2], "allow") != 0 &&
-      strcmp(cmd->argv[2], "deny") != 0)
+      strcmp(cmd->argv[2], "deny") != 0) {
     CONF_ERROR(cmd, "second parameter must be 'allow' or 'deny'");
+  }
 
   /* Check the third parameter to make sure it is "user" or "group" */
   if (strcmp(cmd->argv[3], "user") != 0 &&
-      strcmp(cmd->argv[3], "group") != 0)
+      strcmp(cmd->argv[3], "group") != 0) {
     CONF_ERROR(cmd, "third parameter must be 'user' or 'group'");
+  }
 
-  if ((bad_action = ctrls_set_module_acls(msg_acttab, msg_pool,
-      actions, cmd->argv[2], cmd->argv[3], cmd->argv[4])) != NULL)
+  bad_action = pr_ctrls_set_module_acls(msg_acttab, msg_pool, actions,
+    cmd->argv[2], cmd->argv[3], cmd->argv[4]);
+  if (bad_action != NULL) {
     CONF_ERROR(cmd, pstrcat(cmd->tmp_pool, ": unknown action: '",
       bad_action, "'", NULL));
+  }
 
   return PR_HANDLED(cmd);
 }
@@ -299,7 +307,7 @@ MODRET msg_post_any(cmd_rec *cmd) {
   }
 
   /* If there are no messages pending for this process, be done now. */
-  if (!msg_pending_list ||
+  if (msg_pending_list == NULL ||
       msg_pending_list->nelts == 0) {
     return PR_DECLINED(cmd);
   }
@@ -336,7 +344,7 @@ MODRET msg_post_err_any(cmd_rec *cmd) {
   }
 
   /* If there are no messages pending for this process, be done now. */
-  if (!msg_pending_list ||
+  if (msg_pending_list == NULL ||
       msg_pending_list->nelts == 0) {
     return PR_DECLINED(cmd);
   }
@@ -377,9 +385,11 @@ static void msg_exit_ev(const void *event_data, void *user_data) {
       ServerType == SERVER_STANDALONE) {
     struct msqid_ds ds;
 
-    if (msgctl(msg_qid, IPC_RMID, &ds) < 0 && errno != EINVAL)
+    if (msgctl(msg_qid, IPC_RMID, &ds) < 0 &&
+        errno != EINVAL) {
       pr_log_debug(DEBUG1, MOD_MSG_VERSION ": error removing queue %d: %s",
         msg_qid, strerror(errno));
+    }
   }
 }
 
@@ -391,7 +401,7 @@ static void msg_postparse_ev(const void *event_data, void *user_data) {
    */
 
   c = find_config(main_server->conf, CONF_PARAM, "MessageLog", FALSE);
-  if (c) {
+  if (c != NULL) {
     const char *path = c->argv[0];
 
     if (strcasecmp(path, "none") != 0 &&
@@ -402,43 +412,46 @@ static void msg_postparse_ev(const void *event_data, void *user_data) {
     }
   }
 
-  if (msg_queue_path)
+  if (msg_queue_path != NULL) {
     msg_queue_fh = pr_fsio_open(msg_queue_path, O_RDWR|O_CREAT);
 
-  else
+  } else {
     errno = EINVAL;
+  }
 
-  if (!msg_queue_fh) {
+  if (msg_queue_fh == NULL) {
     (void) pr_log_writefile(msg_logfd, MOD_MSG_VERSION,
       "error opening MessageQueue: %s", strerror(errno));
 
   } else {
     msg_qid = msg_get_queue(msg_queue_path);
-    if (msg_qid < 0)
+    if (msg_qid < 0) {
       (void) pr_log_writefile(msg_logfd, MOD_MSG_VERSION,
         "error obtaining queue ID: %s", strerror(errno));
-else
-pr_log_debug(DEBUG0, MOD_MSG_VERSION ": obtained queue ID %d", msg_qid);
+
+    } else {
+      pr_log_debug(DEBUG0, MOD_MSG_VERSION ": obtained queue ID %d", msg_qid);
+    }
   }
 }
 
 static void msg_restart_ev(const void *event_data, void *user_data) {
   register unsigned int i;
 
-  if (msg_pool)
+  if (msg_pool != NULL) {
     destroy_pool(msg_pool);
+  }
 
   msg_pool = make_sub_pool(permanent_pool);
   pr_pool_tag(msg_pool, MOD_MSG_VERSION);
 
   for (i = 0; msg_acttab[i].act_action; i++) {
     msg_acttab[i].act_acl = pcalloc(msg_pool, sizeof(ctrls_acl_t));
-    ctrls_init_acl(msg_acttab[i].act_acl);
+    pr_ctrls_init_acl(msg_acttab[i].act_acl);
   }
 }
 
 static void msg_sigusr2_ev(const void *event_data, void *user_data) {
-
   /* Check the queue for any messages for us. */
   int res = msg_recv_msg();
 
@@ -461,11 +474,12 @@ static void msg_sigusr2_ev(const void *event_data, void *user_data) {
 }
 
 static void msg_startup_ev(const void *event_data, void *user_data) {
-  int res;
+  int res, xerrno;
 
   /* Make sure the process has an fd to the scoreboard. */
   PRIVS_ROOT
   res = pr_open_scoreboard(O_RDWR);
+  xerrno = errno;
   PRIVS_RELINQUISH
 
   if (res < 0) {
@@ -483,7 +497,7 @@ static void msg_startup_ev(const void *event_data, void *user_data) {
         break;
 
       default:
-        pr_log_debug(DEBUG0, "error opening scoreboard: %s", strerror(errno));
+        pr_log_debug(DEBUG0, "error opening scoreboard: %s", strerror(xerrno));
         break;
     }
   }
@@ -496,13 +510,14 @@ static void msg_startup_ev(const void *event_data, void *user_data) {
 static int msg_handle_msg(pr_ctrls_t *ctrl, int reqargc, char **reqargv) {
   int res = 0, msg_errno = 0, msg_know_dst = FALSE, msg_sent = FALSE;
 
-  if (!ctrls_check_acl(ctrl, msg_acttab, "msg")) {
+  if (!pr_ctrls_check_acl(ctrl, msg_acttab, "msg")) {
     pr_ctrls_add_response(ctrl, "access denied");
     return -1;
   }
 
   /* Sanity check */
-  if (reqargc == 0 || reqargv == NULL) {
+  if (reqargc == 0 ||
+      reqargv == NULL) {
     pr_ctrls_add_response(ctrl, "missing required parameters");
     return -1;
   }
@@ -609,7 +624,7 @@ static int msg_handle_msg(pr_ctrls_t *ctrl, int reqargc, char **reqargv) {
     }
 
     na = pr_netaddr_get_addr(ctrl->ctrls_tmp_pool, reqargv[1], NULL);
-    if (!na) {
+    if (na == NULL) {
       pr_ctrls_add_response(ctrl, "msg host: error resolving '%s': %s",
         reqargv[1], strerror(errno));
       return -1;
@@ -755,16 +770,17 @@ static int msg_handle_msg(pr_ctrls_t *ctrl, int reqargc, char **reqargv) {
     return -1;
   }
 
-  if (msg_sent)
+  if (msg_sent == TRUE) {
     pr_ctrls_add_response(ctrl, "message sent");
 
-  else if (!msg_know_dst)
+  } else if (msg_know_dst == FALSE) {
     pr_ctrls_add_response(ctrl, "unable to send message: "
       "no such client connected");
 
-  else
+  } else {
     pr_ctrls_add_response(ctrl, "error sending message: %s",
       strerror(msg_errno));
+  }
 
   return res;
 }
@@ -780,13 +796,14 @@ static int msg_init(void) {
 
   for (i = 0; msg_acttab[i].act_action; i++) {
     msg_acttab[i].act_acl = pcalloc(msg_pool, sizeof(ctrls_acl_t));
-    ctrls_init_acl(msg_acttab[i].act_acl);
+    pr_ctrls_init_acl(msg_acttab[i].act_acl);
 
     if (pr_ctrls_register(&msg_module, msg_acttab[i].act_action,
-        msg_acttab[i].act_desc, msg_acttab[i].act_cb) < 0)
+        msg_acttab[i].act_desc, msg_acttab[i].act_cb) < 0) {
       pr_log_pri(PR_LOG_INFO, MOD_MSG_VERSION
         ": error registering '%s' control: %s",
         msg_acttab[i].act_action, strerror(errno));
+    }
   }
 
   pr_event_register(&msg_module, "core.exit", msg_exit_ev, NULL);
@@ -803,7 +820,7 @@ static int msg_sess_init(void) {
   /* If there was an error opening the MessageQueue, force the module to
    * be inoperative.  We'd much rather not operate without the MessageQueue.
    */
-  if (!msg_queue_fh) {
+  if (msg_queue_fh == NULL) {
     msg_engine = FALSE;
     (void) pr_log_writefile(msg_logfd, MOD_MSG_VERSION,
       "missing required MessageQueue, disabling module");
@@ -818,12 +835,16 @@ static int msg_sess_init(void) {
   }
 
   c = find_config(main_server->conf, CONF_PARAM, "MessageEngine", FALSE);
-  if (c &&
-      *((unsigned char *) c->argv[0]) == TRUE)
-    msg_engine = TRUE;
+  if (c != NULL) {
+    unsigned char engine;
 
-  if (!msg_engine)
+    engine = *((unsigned char *) c->argv[0]);
+    msg_engine = engine;
+  }
+
+  if (msg_engine == FALSE) {
     return 0;
+  }
 
   pr_event_register(&msg_module, "core.signal.USR2", msg_sigusr2_ev, NULL);
   pr_event_unregister(&msg_module, "core.exit", msg_exit_ev);
