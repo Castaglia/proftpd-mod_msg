@@ -21,7 +21,7 @@
  * resulting executable, without including the source code for OpenSSL in the
  * source distribution.
  *
- * This is mod_msg, contrib software for proftpd 1.2 and above.
+ * This is mod_msg, contrib software for proftpd 1.3.x and above.
  * For more information contact TJ Saunders <tj@castaglia.org>.
  */
 
@@ -36,7 +36,7 @@
 # define MSGMAX 8192
 #endif /* MSGMAX */
 
-#define MOD_MSG_VERSION		"mod_msg/0.5"
+#define MOD_MSG_VERSION		"mod_msg/0.5.1"
 
 /* Make sure the version of proftpd is as necessary. */
 #if PROFTPD_VERSION_NUMBER < 0x0001030604
