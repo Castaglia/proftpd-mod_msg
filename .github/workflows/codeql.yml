@@ -1,0 +1,75 @@
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**/*.md'
+      - '**/doc/*'
+  pull_request:
+    branches:
+      - master
+    paths-ignore:
+      - '**/*.md'
+      - '**/doc/*'
+  schedule:
+    - cron: "22 7 * * 5"
+
+jobs:
+  analyze:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: true
+      matrix:
+        language:
+          - cpp
+
+    steps:
+      - name: Checkout ProFTPD
+        uses: actions/checkout@v3
+        with:
+          repository: proftpd/proftpd
+
+      - name: Checkout mod_msg
+        uses: actions/checkout@v3
+        with:
+          path: proftpd-mod_msg
+
+      - name: Install Packages
+        run: |
+          sudo apt-get update
+
+      - name: Prepare module
+        run: |
+          cp proftpd-mod_msg/mod_msg.c contrib/mod_msg.c
+
+      - name: Configure
+        run: |
+          ./configure --enable-ctrls --with-modules=mod_msg
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          config-file: proftpd-mod_msg/.codeql.yml
+          queries: +security-and-quality
+          source-root: proftpd-mod_msg
+
+      - name: Build
+        run: |
+          make
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          checkout_path: proftpd-mod_msg
+          output: sarif-results
+          upload: true
