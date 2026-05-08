@@ -25,6 +25,12 @@ jobs:
       contents: read
       security-events: write
 
+    env:
+      # Let's try opting into use of Nodejs v24; see:
+      #  https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+      # GitHub runners still causing problems with NodeJS v20; see:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     strategy:
       fail-fast: true
       matrix:
@@ -33,12 +39,12 @@ jobs:
 
     steps:
       - name: Checkout ProFTPD
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           repository: proftpd/proftpd
 
       - name: Checkout mod_msg
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           path: proftpd-mod_msg
 
@@ -55,7 +61,7 @@ jobs:
           ./configure --enable-ctrls --with-modules=mod_msg
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           config-file: proftpd-mod_msg/.codeql.yml
@@ -67,7 +73,7 @@ jobs:
           make
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{ matrix.language }}"
           checkout_path: proftpd-mod_msg
