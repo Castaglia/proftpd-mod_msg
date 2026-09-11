@@ -1,6 +1,6 @@
 /*
  * ProFTPD: mod_msg -- a module for sending messages to connected clients
- * Copyright (c) 2004-2025 TJ Saunders
+ * Copyright (c) 2004-2026 TJ Saunders
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,8 +13,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA 02110-1335, USA.
+ * along with this program; if not, see <https://www.gnu.org/licenses/>.
  *
  * As a special exemption, TJ Saunders and other respective copyright holders
  * give permission to link this program with OpenSSL, and distribute the
@@ -110,14 +109,15 @@ static int msg_get_queue(const char *path) {
    */
   qid = msgget(key, IPC_CREAT|IPC_EXCL|0666);
   if (qid < 0) {
-    if (errno == EEXIST)
+    if (errno == EEXIST) {
       qid = msgget(key, 0);
 
-    else
+    } else {
       return -1;
+    }
   }
 
-  return qid;  
+  return qid;
 }
 
 static int msg_recv_msg(void) {
